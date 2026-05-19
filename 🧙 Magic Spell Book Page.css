@@ -1,0 +1,20 @@
+.book-title {
+font-size : 46px;
+font-family: Georgia, serif;
+font-weight: bold;
+color:aqua
+}
+
+.spell-name {
+    font-size: 26px;
+    font-weight: bold;
+    color: gold;
+    font-style: italic;
+}
+
+.ingredients {
+    font-size: 18px;
+    color: blueviolet;
+    font-style: italic;
+    list-style: 2.2;
+}
