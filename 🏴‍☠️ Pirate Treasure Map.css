@@ -1,0 +1,16 @@
+.map-title {
+    font-size: 32px;
+    font-weight: bold;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+
+.fake-location {
+  text-decoration: line-through;
+}
+
+.real-location {
+    font-weight: bold;
+    color: blue;
+    text-decoration: underline;
+}
