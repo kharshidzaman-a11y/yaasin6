@@ -1,18 +1,47 @@
 // ════════════════════════════════════════════════════════════════════════════
 // HeroSection.jsx — Main chat interface (ChatPage)
 // ════════════════════════════════════════════════════════════════════════════
-import SearchModal from './SearchModal';
+
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { parseAIText } from '../utils/textParser';
 import { STAGE, AGE, CATEGORIES_BY_AGE, MOODS_BY_AGE, LANGUAGES } from '../constants';
-
-// ──────────────────── LESSON 4 ────────────────────
-// TODO: Import SearchModal from './SearchModal'
-// ──────────────────── STUBS: delete after adding real code ────────────────
 import SearchModal from './SearchModal';
-// ──────────────────── END ─────────────────────────
 
+async function handleSend() {
+  const msg = inputVal.trim();
+  if (!msg || isBotTyping) return;
+  setInputVal('');
+  if (stage === STAGE.NAME)       { handleNameSubmit(msg); return; }
+  if (stage === STAGE.GREET_MOOD) { setInputActive(false); addMsg('user', msg); handleGreetingMood(msg); return; }
+  if (stage !== STAGE.CHAT)       return;
+  if (isRestricted(msg)) { addMsg('user', msg); setInputActive(false); setIsBotTyping(true); try { const { reply } = await callAIWithSearch(msg); addMsg('bot', reply || 'Use the 🔍 search icon to find movies!'); } catch { addMsg('bot', 'Something went wrong. Try again!'); } finally { setIsBotTyping(false); setInputActive(true); } return; }
+  addMsg('user', msg); setInputActive(false); setIsBotTyping(true);
+  try {
+    const { reply } = await callAIWithSearch(msg);
+    addMsg('bot', reply || 'Use the 🔍 search icon to find movies!');
+  } catch {
+    addMsg('bot', 'Something went wrong. Try again!');
+  } finally {
+    setIsBotTyping(false);
+    setInputActive(true);
+  }
+}
+
+const CHIPS = {
+  'Hidden gems':  'What are some underrated hidden gem movies?',
+  'Latest movies': 'Recommend great movies from the last 2 years.',
+  'Something different': 'Recommend something completely different.',
+  'Top picks':  'What are your top movie picks right now?',
+};
+
+async function handleChip(chip) {
+  addMsg('user', chip); setIsBotTyping(true);
+  try {
+    const { reply } = await callAiWithSearch(CHIPS[chip]);
+    addMsg('bot', reply || 'Here are my picks!');
+  } finally { setIsBotTyping(false); }
+}
 
 function TypingDots() {
   return (
@@ -30,7 +59,6 @@ function SpecialContent({ content }) {
   const [cats,  setCats]  = useState([]);
   const [langs, setLangs] = useState(['Any Language']);
   const { type } = content;
-  const [showSearch, setShowSearch] = useState(false);
 
   if (type === 'mood-greeting') return (
     <div className="choice-row">
@@ -38,9 +66,7 @@ function SpecialContent({ content }) {
         .map(([label, val]) => (
           <button key={val} className="choice-btn" onClick={() => content.onSelect(val)}>{label}</button>
         ))}
-      {content.enableTyping && (
-        <button className="choice-btn type-btn" onClick={content.enableTyping}>Type</button>
-      )}
+      {content.enableTyping && <button className="choice-btn type-btn" onClick={content.enableTyping}>Type</button>}
     </div>
   );
 
@@ -68,8 +94,7 @@ function SpecialContent({ content }) {
             </button>
           ))}
         </div>
-        <button className="confirm-btn" disabled={!cats.length}
-          onClick={() => content.onConfirm(cats)}>
+        <button className="confirm-btn" disabled={!cats.length} onClick={() => content.onConfirm(cats)}>
           Let's find your movies!
         </button>
       </div>
@@ -81,13 +106,9 @@ function SpecialContent({ content }) {
     return (
       <div className="choice-row">
         {moods.map(m => (
-          <button key={m.value} className="choice-btn" onClick={() => content.onSelect(m.value)}>
-            {m.label}
-          </button>
+          <button key={m.value} className="choice-btn" onClick={() => content.onSelect(m.value)}>{m.label}</button>
         ))}
-        {content.enableTyping && (
-          <button className="choice-btn type-btn" onClick={content.enableTyping}>Type</button>
-        )}
+        {content.enableTyping && <button className="choice-btn type-btn" onClick={content.enableTyping}>Type</button>}
       </div>
     );
   }
@@ -112,8 +133,7 @@ function SpecialContent({ content }) {
             </button>
           ))}
         </div>
-        <button className="confirm-btn" disabled={!langs.length}
-          onClick={() => content.onConfirm(langs)}>
+        <button className="confirm-btn" disabled={!langs.length} onClick={() => content.onConfirm(langs)}>
           Let's go!
         </button>
       </div>
@@ -137,9 +157,7 @@ function ChatRow({ msg, onMovieClick }) {
   if (content?.type) return (
     <div className="chat-row bot-row">
       <div className="bot-avatar"><i className="bi bi-stars" /></div>
-      <div className="bubble bot-bubble interactive-bubble">
-        <SpecialContent content={content} />
-      </div>
+      <div className="bubble bot-bubble interactive-bubble"><SpecialContent content={content} /></div>
     </div>
   );
   return (
@@ -157,25 +175,18 @@ export default function ChatPage() {
     stage, setStage, chatMsgs, addMsg, isBotTyping, setIsBotTyping,
     userName, setUserName, userAge, setUserAge, userMood, setUserMood,
     userCategories, setUserCategories, setUserLanguage,
-    callAI, switchAge,
+    callAI, callAIWithSearch, switchAge, isRestricted,
   } = useApp();
 
   const [inputVal,    setInputVal]    = useState('');
   const [inputActive, setInputActive] = useState(false);
   const [placeholder, setPlaceholder] = useState('Type your name to begin...');
-
-  // ──────────────────── LESSON 4 ────────────────────
-  // TODO: Add showSearch state to control the search modal
-  // ──────────────────── STUBS: delete after adding real code ────────────────
-  const [showSearch, setShowSearch] = useState(false);
-  // ──────────────────── END ─────────────────────────
+  const [showSearch,  setShowSearch]  = useState(false);
 
   const msgsEndRef  = useRef(null);
   const welcomeSent = useRef(false);
 
-  useEffect(() => {
-    msgsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMsgs, isBotTyping]);
+  useEffect(() => { msgsEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMsgs, isBotTyping]);
 
   useEffect(() => {
     if (stage !== STAGE.NAME || chatMsgs.length > 0) return;
@@ -183,9 +194,8 @@ export default function ChatPage() {
     const t = setTimeout(() => {
       if (welcomeSent.current) return;
       welcomeSent.current = true;
-      setInputActive(false); setInputVal('');
-      setPlaceholder('Type your name to begin...');
-      addMsg('bot', "Welcome to CineVerse! I'm CineBot, your personal AI movie companion. What should I call you?");
+      setInputActive(false); setInputVal(''); setPlaceholder('Type your name to begin...');
+      addMsg('bot', "Welcome to CineVerse! 🎬 I'm CineBot, your personal AI movie companion. What should I call you?");
       setInputActive(true);
     }, 400);
     return () => clearTimeout(t);
@@ -196,23 +206,17 @@ export default function ChatPage() {
     const first = name.trim().split(' ')[0];
     setUserName(first); setInputActive(false); addMsg('user', name.trim());
     setStage(STAGE.GREET_MOOD); setIsBotTyping(true);
-    try {
-      addMsg('bot', await callAI(`The user's name is ${first}. Greet them warmly in 1 sentence, then ask how they're feeling today.`));
-    } catch {
-      addMsg('bot', `Nice to meet you, ${first}! How are you feeling today?`);
-    } finally { setIsBotTyping(false); }
-    addMsg('bot', {
-      type: 'mood-greeting', onSelect: handleGreetingMood,
-      enableTyping: () => { setInputActive(true); setPlaceholder('Tell me how you feel...'); },
-    });
+    try { addMsg('bot', await callAI(`The user's name is ${first}. Greet them warmly with 1 sentence and use 1-2 emojis. Then ask how they're feeling today.`)); }
+    catch { addMsg('bot', `Nice to meet you, ${first}! 😊 How are you feeling today?`); }
+    finally { setIsBotTyping(false); }
+    addMsg('bot', { type: 'mood-greeting', onSelect: handleGreetingMood,
+      enableTyping: () => { setInputActive(true); setPlaceholder('Tell me how you feel...'); } });
   }
 
   async function handleGreetingMood(mood) {
     addMsg('user', mood); setInputActive(false); setStage(STAGE.AGE); setIsBotTyping(true);
-    try {
-      addMsg('bot', await callAI(`${userName} said: "${mood}". Respond with 1 warm sentence, then ask for their age group.`));
-    } catch { addMsg('bot', 'Got it! How old are you?'); }
-    finally { setIsBotTyping(false); }
+    try { addMsg('bot', await callAI(`${userName} said: "${mood}". Respond with 1 warm empathetic sentence using 1 emoji, then ask for their age group.`)); }
+    catch { addMsg('bot', 'Got it! 😄 How old are you?'); } finally { setIsBotTyping(false); }
     addMsg('bot', { type: 'age-picker', onSelect: handleAgeSelect });
   }
 
@@ -220,7 +224,7 @@ export default function ChatPage() {
     setUserAge(age);
     addMsg('user', { kids: 'Kids (Under 13)', teen: 'Teen (13-17)', adult: 'Adult (18+)' }[age]);
     setStage(STAGE.CATEGORIES);
-    addMsg('bot', 'Great! Pick the genres you love');
+    addMsg('bot', 'Great! 🎭 Pick the genres you love');
     addMsg('bot', { type: 'category-picker', age, onConfirm: handleCategoriesConfirm });
   }
 
@@ -228,37 +232,68 @@ export default function ChatPage() {
     const allCats = Object.values(CATEGORIES_BY_AGE).flat();
     addMsg('user', `I love: ${cats.map(c => allCats.find(x => x.id === c)?.label || c).join(', ')}`);
     setUserCategories(cats); setStage(STAGE.MOVIE_MOOD);
-    addMsg('bot', "Fantastic taste! What's your vibe right now?");
-    addMsg('bot', {
-      type: 'mood-picker', age: userAge, onSelect: handleMoodSelect,
-      enableTyping: () => { setInputActive(true); setPlaceholder('What mood are you in?'); },
-    });
+    addMsg('bot', "Fantastic taste! 🍿 What's your vibe right now?");
+    addMsg('bot', { type: 'mood-picker', age: userAge, onSelect: handleMoodSelect,
+      enableTyping: () => { setInputActive(true); setPlaceholder('What mood are you in?'); } });
   }
 
   function handleMoodSelect(mood) {
     setUserMood(mood); addMsg('user', mood); setStage(STAGE.LANGUAGE);
-    addMsg('bot', 'Love it! Last thing — what language do you prefer?');
+    addMsg('bot', 'Love it! 🌍 Last thing — what language do you prefer?');
     addMsg('bot', { type: 'language-picker', onConfirm: handleLanguageConfirm });
   }
 
-  function handleLanguageConfirm(langs) {
+  async function handleLanguageConfirm(langs) {
     setUserLanguage(langs);
     addMsg('user', langs.includes('Any Language') ? 'Any language' : langs.join(', '));
     setStage(STAGE.CHAT); setPlaceholder(`Ask me anything, ${userName || 'friend'}...`);
-    setInputActive(true);
-    addMsg('bot', `You're all set, ${userName || 'friend'}! 🎬 Use the 🔍 search icon to find any movie.`);
+    setInputActive(true); setIsBotTyping(true);
+    try {
+      const lc = langs.includes('Any Language') ? 'any language' : langs.join(' or ');
+      const prompt = userAge === AGE.KIDS
+        ? `Recommend 3 great G/PG animated family movies for a child under 13. Language: ${lc}.`
+        : `Recommend 3 great movies in ${lc} for mood: "${userMood}" and genres: ${userCategories.join(', ')}.`;
+      const { reply } = await callAIWithSearch(prompt);
+      addMsg('bot', reply || 'Here are some picks for you! 🎬');
+    } catch { addMsg('bot', 'Something went wrong. Try asking me directly!'); }
+    finally { setIsBotTyping(false); }
   }
 
-  function handleSend() {
+
+  // ──────────────────── LESSON 5 ────────────────────
+  // TODO: Write handleSend() — replace the stub below with real Groq AI
+  //   - In STAGE.CHAT: check isRestricted(msg), then call callAIWithSearch(msg)
+  // TODO: Define CHIPS object with 4 quick-suggestion labels and prompts
+  // TODO: Write handleChip(chip) — call callAIWithSearch with the chip prompt
+  // ──────────────────── STUBS: delete after adding real code ────────────────
+  async function handleSend() {
     const msg = inputVal.trim();
     if (!msg || isBotTyping) return;
     setInputVal('');
     if (stage === STAGE.NAME)       { handleNameSubmit(msg); return; }
     if (stage === STAGE.GREET_MOOD) { setInputActive(false); addMsg('user', msg); handleGreetingMood(msg); return; }
     if (stage !== STAGE.CHAT)       return;
-    addMsg('user', msg);
-    addMsg('bot', 'Use the 🔍 search icon in the header to find movies by title!');
+    addMsg('user', msg); setInputActive(false); setIsBotTyping(true);
+    try {
+      const { reply } = await callAIWithSearch(msg);
+      addMsg('bot', reply || 'Use the 🔍 search icon to find movies!');
+    } catch { addMsg('bot', 'Something went wrong. Try again!'); }
+    finally { setIsBotTyping(false); setInputActive(true); }
   }
+  const CHIPS = {
+    'Hidden gems':   'What are some underrated hidden gem movies?',
+    'Latest movies': 'Recommend great movies from the last 2 years.',
+    'Top picks':     'What are your top movie picks right now?',
+  };
+  async function handleChip(chip) {
+    addMsg('user', chip); setIsBotTyping(true);
+    try {
+      const { reply } = await callAIWithSearch(CHIPS[chip]);
+      addMsg('bot', reply || 'Here are my picks!');
+    } finally { setIsBotTyping(false); }
+  }
+  // ──────────────────── END ─────────────────────────
+
 
   return (
     <div className="chat-page">
@@ -284,16 +319,10 @@ export default function ChatPage() {
               ))}
             </div>
           )}
-
-          {/* ──────────────────── LESSON 4 ──────────────────── */}
-          {/* TODO: Add a search icon button — sets showSearch to true */}
-          {/* ──────────────────── STUBS: delete after adding real code ─── */}
           <button className="search-icon-btn" onClick={() => setShowSearch(true)}
             aria-label="Search movies" title="Search movies">
             <i className="bi bi-search" />
           </button>
-          {/* ──────────────────── END ─────────────────────────── */}
-
           <span className="live-pill"><span className="live-dot" />Live AI</span>
         </div>
       </div>
@@ -303,6 +332,14 @@ export default function ChatPage() {
         {isBotTyping && <TypingDots />}
         <div ref={msgsEndRef} />
       </div>
+
+      {stage === STAGE.CHAT && !isBotTyping && (
+        <div className="chat-chips">
+          {Object.keys(CHIPS).map(c => (
+            <button key={c} className="ai-suggestion-chip" onClick={() => handleChip(c)}>{c}</button>
+          ))}
+        </div>
+      )}
 
       <div className="chat-input-bar">
         <input type="text" className="chat-text-input"
@@ -318,10 +355,6 @@ export default function ChatPage() {
         </button>
       </div>
 
-      <button className="search-icon-btn" onClick={() => setShowSearch(true)}
-        aria-label="Search movies" title="Search movies">
-        <i className="bi bi-search" />
-      </button>
       {showSearch && <SearchModal onClose={() => setShowSearch(false)} />}
 
     </div>
